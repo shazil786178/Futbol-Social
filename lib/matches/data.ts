@@ -125,7 +125,8 @@ export async function listHighlights(matchId?: string): Promise<Highlight[]> {
   }
 
   return data.map((row) => ({
-    id: row.id,
+    // Official clips keep their external id across re-syncs so likes stick
+    id: (row.external_id as string | null) ?? row.id,
     matchId: row.match_id ?? null,
     title: row.title,
     duration: row.duration,
@@ -149,6 +150,11 @@ export async function listHighlights(matchId?: string): Promise<Highlight[]> {
           ? "youtube"
           : null),
     competitionLabel: row.competition_label ?? null,
+    happenedAt: row.published_at ?? row.created_at ?? null,
+    userId: row.user_id ?? null,
+    caption: row.caption ?? null,
+    teamTags: Array.isArray(row.team_tags) ? (row.team_tags as string[]) : [],
+    category: row.category ?? null,
   }));
 }
 

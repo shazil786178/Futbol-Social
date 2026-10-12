@@ -1,4 +1,12 @@
-import { buildClipReel } from "@/lib/clips/build-reel";
+import { buildClipReel, type ReelTab } from "@/lib/clips/build-reel";
+import {
+  loadClipStats,
+  loadUploaderNames,
+  loadViewerContext,
+  type ClipStats,
+  type ViewerContext,
+  EMPTY_VIEWER,
+} from "@/lib/clips/social";
 import {
   fetchScoreBatHighlights,
   flattenScoreBatHighlights,
@@ -10,6 +18,7 @@ import {
 } from "@/lib/football-api/youtube";
 import { listHighlights, listMatches } from "@/lib/matches/data";
 import type { Highlight } from "@/lib/matches/types";
+import { createClient } from "@/lib/supabase/server";
 import type { ClipReelItem } from "@/components/clips/clips-reel";
 
 type LocalMatch = {
@@ -33,6 +42,7 @@ function toHighlight(h: SyncedHighlight, source: string): Highlight {
     source,
     competitionLabel: h.competitionLabel,
     happenedAt: h.happenedAt,
+    userId: null,
   };
 }
 
@@ -54,8 +64,19 @@ async function liveScoreBat(local: LocalMatch[]): Promise<Highlight[]> {
   );
 }
 
-/** Live sources first so Clips always has today's official videos with audio. */
-export async function loadClipReel(): Promise<ClipReelItem[]> {
+function keyOf(h: Highlight) {
+  const url = h.embedUrl || h.videoUrl;
+  if (!url) return h.id;
+  try {
+    const u = new URL(url);
+    return `${u.hostname}${u.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
+/** Every playable clip we know about, deduped on the player URL. */
+export async function loadAllClips() {
   const matches = await listMatches();
   const local: LocalMatch[] = matches.map((m) => ({
     id: m.id,
@@ -70,24 +91,63 @@ export async function loadClipReel(): Promise<ClipReelItem[]> {
     listHighlights().catch(() => [] as Highlight[]),
   ]);
 
-  // Stored rows carry DB ids; live rows carry external ids — dedupe on the
-  // player URL so the same video never shows twice.
+  // Live rows are freshest; stored rows add fan uploads and anything that has
+  // dropped out of the live feeds. Same video → one entry.
   const byKey = new Map<string, Highlight>();
-  const keyOf = (h: Highlight) => {
-    const url = h.embedUrl || h.videoUrl;
-    if (!url) return h.id;
-    try {
-      const u = new URL(url);
-      return `${u.hostname}${u.pathname}`;
-    } catch {
-      return url;
-    }
-  };
   for (const h of stored) {
     if (h.embedUrl || h.videoUrl) byKey.set(keyOf(h), h);
   }
   for (const h of scorebat) byKey.set(keyOf(h), h);
   for (const h of youtube) byKey.set(keyOf(h), h);
 
-  return buildClipReel([...byKey.values()], matches);
+  return { matches, clips: [...byKey.values()] };
+}
+
+export type ReelLoad = {
+  clips: ClipReelItem[];
+  tab: ReelTab;
+  viewer: ViewerContext;
+  counts: Record<ReelTab, number>;
+  reels: Record<ReelTab, ClipReelItem[]>;
+};
+
+/** Ranked reel for a tab. Signed-out viewers get the global For You feed. */
+export async function loadClipReelFor(tab: ReelTab = "fyp"): Promise<ReelLoad> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const [{ matches, clips }, viewer, stats] = await Promise.all([
+    loadAllClips(),
+    loadViewerContext(supabase, user?.id ?? null).catch(() => EMPTY_VIEWER),
+    loadClipStats(supabase).catch(() => new Map<string, ClipStats>()),
+  ]);
+  const uploaderNames = await loadUploaderNames(
+    supabase,
+    clips.map((c) => c.userId ?? "").filter(Boolean),
+  ).catch(() => new Map<string, string>());
+
+  const opts = { ctx: viewer, stats, uploaderNames };
+  const fyp = buildClipReel(clips, matches, { ...opts, tab: "fyp" });
+  const following = buildClipReel(clips, matches, { ...opts, tab: "following" });
+  const friends = buildClipReel(clips, matches, { ...opts, tab: "friends" });
+
+  return {
+    clips: tab === "following" ? following : tab === "friends" ? friends : fyp,
+    tab,
+    viewer,
+    counts: {
+      fyp: fyp.length,
+      following: following.length,
+      friends: friends.length,
+    },
+    reels: { fyp, following, friends },
+  };
+}
+
+/** Backwards-compatible: the global For You reel. */
+export async function loadClipReel(): Promise<ClipReelItem[]> {
+  const { clips } = await loadClipReelFor("fyp");
+  return clips;
 }

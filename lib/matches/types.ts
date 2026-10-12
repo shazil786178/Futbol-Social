@@ -37,6 +37,11 @@ export type Highlight = {
   source: string | null;
   competitionLabel: string | null;
   happenedAt?: string | null;
+  /** Uploader (fan clips) — null for official sources */
+  userId?: string | null;
+  caption?: string | null;
+  teamTags?: string[];
+  category?: string | null;
 };
 
 export type Skit = {

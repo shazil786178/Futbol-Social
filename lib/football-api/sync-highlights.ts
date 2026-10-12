@@ -106,7 +106,7 @@ export async function syncScoreBatHighlights(
     else console.error("ScoreBat stub matches:", error.message);
   }
 
-  const fullRows = flattened.map((h) => ({
+  const baseRows = flattened.map((h) => ({
     match_id: h.matchId,
     title: h.title.slice(0, 180),
     duration: "HL",
@@ -120,6 +120,20 @@ export async function syncScoreBatHighlights(
     external_id: h.externalId,
     competition_label: h.competitionLabel,
   }));
+
+  // Migration 017 adds published_at (used by the ranking). Probe once; fall
+  // back to the 013 shape if the column is not there yet.
+  let fullRows: Record<string, unknown>[] = baseRows.map((r, i) => ({
+    ...r,
+    published_at: flattened[i]!.happenedAt,
+  }));
+  {
+    const { error } = await supabase
+      .from("highlights")
+      .select("published_at", { head: true, count: "exact" })
+      .limit(1);
+    if (error) fullRows = baseRows;
+  }
 
   // Legacy shape if migration 013 not applied yet — store the embed in video_url.
   // match_id is NOT NULL before 013, so unlinked rows are skipped there.

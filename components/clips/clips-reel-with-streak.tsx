@@ -2,10 +2,26 @@
 
 import { useEffect, useRef } from "react";
 import { completeDailyMission } from "@/app/streaks/actions";
-import { ClipsReel, type ClipReelItem } from "@/components/clips/clips-reel";
+import {
+  ClipsReel,
+  type ClipReelItem,
+  type ReelTabKey,
+} from "@/components/clips/clips-reel";
 
-/** Marks the daily “watch clips” mission once per visit. */
-export function ClipsReelWithStreak({ clips }: { clips: ClipReelItem[] }) {
+/** Marks the daily "watch clips" mission once per visit. */
+export function ClipsReelWithStreak({
+  clips,
+  tab,
+  counts,
+  signedIn,
+  startId,
+}: {
+  clips: ClipReelItem[];
+  tab?: ReelTabKey;
+  counts?: Partial<Record<ReelTabKey, number>>;
+  signedIn?: boolean;
+  startId?: string | null;
+}) {
   const logged = useRef(false);
 
   useEffect(() => {
@@ -14,5 +30,13 @@ export function ClipsReelWithStreak({ clips }: { clips: ClipReelItem[] }) {
     void completeDailyMission("clip");
   }, []);
 
-  return <ClipsReel clips={clips} />;
+  return (
+    <ClipsReel
+      clips={clips}
+      tab={tab}
+      counts={counts}
+      signedIn={signedIn}
+      startId={startId}
+    />
+  );
 }

@@ -2,26 +2,52 @@ import type { SyncedHighlight } from "@/lib/football-api/scorebat";
 import { mapCompetition, teamsLikelyMatch } from "@/lib/football-api/scorebat";
 
 /**
- * Free, daily match highlights straight from the official league channels on
- * YouTube. Uses the YouTube Data API v3 (free quota: 10,000 units/day — we use
- * about 2 units per channel per refresh), so set YOUTUBE_API_KEY.
+ * Free, daily match highlights straight from official league / rights-holder
+ * channels on YouTube. Uses the YouTube Data API v3 (free quota: 10,000
+ * units/day — about 2 units per channel per refresh), so set YOUTUBE_API_KEY.
+ *
+ * Everything here is embedded through YouTube's own player, which is the
+ * licensed way to show these videos — we never download or re-host anything.
  */
 
 type YouTubeChannel = {
   id: string;
   /** Same "COUNTRY: League" shape ScoreBat uses so mapCompetition() works. */
   label: string;
+  /** 1 = always pulled. 2 = pulled when the day is thin (< MIN_FRESH new clips). */
+  tier: 1 | 2;
 };
 
 export const YOUTUBE_CHANNELS: YouTubeChannel[] = [
-  { id: "UCG5qGWdu8nIRZqJ_GgDwQ-w", label: "ENGLAND: Premier League" },
-  { id: "UCTv-XvfzLX3i4IGWAm4sbmA", label: "SPAIN: La Liga" },
-  { id: "UC6UL29enLNe4mqwTfAyeNuw", label: "GERMANY: Bundesliga" },
-  { id: "UCBJeMCIeLQos7wacox4hmLQ", label: "ITALY: Serie A" },
-  { id: "UCET00YnetHT7tOpu12v8jxg", label: "UEFA: Champions League" }, // CBS Sports Golazo
-  { id: "UCyGa1YEx9ST66rYrJTGIKOw", label: "UEFA: Champions League" }, // UEFA
-  { id: "UCSZbXT5TLLW_i-5W8FZpFsg", label: "USA: MLS" },
+  // Tier 1 — the leagues the app is built around
+  { id: "UCG5qGWdu8nIRZqJ_GgDwQ-w", label: "ENGLAND: Premier League", tier: 1 },
+  { id: "UCTv-XvfzLX3i4IGWAm4sbmA", label: "SPAIN: La Liga", tier: 1 },
+  { id: "UC6UL29enLNe4mqwTfAyeNuw", label: "GERMANY: Bundesliga", tier: 1 },
+  { id: "UCBJeMCIeLQos7wacox4hmLQ", label: "ITALY: Serie A", tier: 1 },
+  { id: "UCET00YnetHT7tOpu12v8jxg", label: "UEFA: Champions League", tier: 1 }, // CBS Sports Golazo
+  { id: "UCyGa1YEx9ST66rYrJTGIKOw", label: "UEFA: Champions League", tier: 1 }, // UEFA
+  { id: "UCSZbXT5TLLW_i-5W8FZpFsg", label: "USA: MLS", tier: 1 },
+  // Tier 2 — more official leagues + rights-holding broadcasters
+  { id: "UCQsH5XtIc9hONE1BQjucM0g", label: "FRANCE: Ligue 1", tier: 2 },
+  { id: "UC3CXMy61P5WQMLiDDJn8nNA", label: "UEFA: Europa League", tier: 2 },
+  { id: "UCq8BPLXtFeiSFOvmJrknWGg", label: "MEXICO: Liga MX", tier: 2 },
+  { id: "UCrf4Fr6uTCoU9RkYa5CbzcA", label: "BRAZIL: Brasileirão", tier: 2 },
+  { id: "UCkgm4b5n3QsMUgB9FjA8S2w", label: "ENGLAND: EFL", tier: 2 },
+  { id: "UCnQpt1UxLq00NFULxTDHMww", label: "ENGLAND: Women's Super League", tier: 2 },
+  { id: "UCpcTrCXblq78GZrTUTLWeBw", label: "WORLD: FIFA", tier: 2 },
+  { id: "UCqn7r-so0mBLaJTtTms9dAQ", label: "CONCACAF", tier: 2 },
+  { id: "UCXTRFt1vLvZpahQtiKJjLaQ", label: "ASIA: AFC", tier: 2 },
+  { id: "UCqZQlzSHbVJrwrn5XvzrzcA", label: "ENGLAND: Premier League", tier: 2 }, // NBC Sports
+  { id: "UCZ7wY7MRDSygp63HIEfdQZA", label: "ENGLAND: Premier League", tier: 2 }, // Sky Sports Football
+  { id: "UClhp9g6TPiqCTOlcw0ROfNg", label: "UEFA: Champions League", tier: 2 }, // TNT Sports
+  { id: "UC6c1z7bA__85CIWZ_jpCK-Q", label: "WORLD: ESPN FC", tier: 2 },
+  { id: "UCooTLkxcpnTNx6vfOovfBFA", label: "WORLD: FOX Soccer", tier: 2 },
+  { id: "UCSZ21xyG8w_33KriMM69IxQ", label: "WORLD: DAZN Football", tier: 2 },
+  { id: "UC0YatYmg5JRYzXJPxIdRd8g", label: "WORLD: beIN SPORTS", tier: 2 },
 ];
+
+/** Below this many clips from the last 24h we go looking for more. */
+export const MIN_FRESH_PER_DAY = 10;
 
 export type YouTubeHighlight = {
   videoId: string;
@@ -30,16 +56,17 @@ export type YouTubeHighlight = {
   thumbnailUrl: string | null;
   competitionLabel: string;
   durationSec: number;
+  channelTitle?: string;
 };
 
 const API = "https://www.googleapis.com/youtube/v3";
 const REVALIDATE_SEC = 15 * 60;
 
 const HIGHLIGHT_WORDS =
-  /\bhighlights?\b|\bresumen\b|\bextended\b|\bevery goal\b|\ball (the )?goals\b|\bbest goals\b|\bgoals? of the\b|\bzusammenfassung\b|\bsintesi\b|\brecap\b|\bmatchday\b|\bmatchweek\b/i;
+  /\bhighlights?\b|\bresumen\b|\bextended\b|\bevery goal\b|\ball (the )?goals\b|\bbest goals\b|\bgoals? of the\b|\bzusammenfassung\b|\bsintesi\b|\brecap\b|\bmatchday\b|\bmatchweek\b|\bmelhores momentos\b|\brésumé\b|\bresumo\b/i;
 const SCORELINE = /\b\d{1,2}\s*[-–:]\s*\d{1,2}\b/;
 const NOISE =
-  /#shorts|\bshorts\b|\bpress conference\b|\binterview\b|\bpodcast\b|\bfull show\b|\bfull match\b|\blive stream\b|\breaction\b|\bpreview\b|\bprediction/i;
+  /#shorts|\bshorts\b|\bpress conference\b|\binterview\b|\bpodcast\b|\bfull show\b|\bfull match\b|\blive stream\b|\breaction\b|\bpreview\b|\bprediction|\btrailer\b|\bdraw\b/i;
 
 export function looksLikeHighlight(title: string): boolean {
   if (NOISE.test(title)) return false;
@@ -74,11 +101,13 @@ export function parseTeamsFromTitle(
   for (const seg of segments) {
     const scored = seg.match(/^(.+?)\s+\d{1,2}\s*[-–:]\s*\d{1,2}\s+(.+?)$/);
     if (scored?.[1] && scored[2]) {
-      return clean(scored[1], scored[2]);
+      const r = clean(scored[1], scored[2]);
+      if (r) return r;
     }
     const versus = seg.match(/^(.+?)\s+(?:vs?\.?|v|-|–|x)\s+(.+?)$/i);
     if (versus?.[1] && versus[2]) {
-      return clean(versus[1], versus[2]);
+      const r = clean(versus[1], versus[2]);
+      if (r) return r;
     }
   }
   return null;
@@ -115,17 +144,18 @@ function titleCase(s: string) {
     );
 }
 
-type PlaylistItemsResponse = {
-  items?: {
-    snippet?: {
-      publishedAt?: string;
-      title?: string;
-      resourceId?: { videoId?: string };
-      thumbnails?: Record<string, { url?: string }>;
-    };
-  }[];
+type Snippet = {
+  publishedAt?: string;
+  title?: string;
+  channelTitle?: string;
+  resourceId?: { videoId?: string };
+  thumbnails?: Record<string, { url?: string }>;
 };
 
+type PlaylistItemsResponse = { items?: { snippet?: Snippet }[] };
+type SearchResponse = {
+  items?: { id?: { videoId?: string }; snippet?: Snippet }[];
+};
 type VideosResponse = {
   items?: {
     id?: string;
@@ -134,10 +164,18 @@ type VideosResponse = {
   }[];
 };
 
-async function getJson<T>(url: string): Promise<T | null> {
+type Candidate = {
+  videoId: string;
+  title: string;
+  publishedAt: string;
+  channelTitle?: string;
+  thumbs?: Record<string, { url?: string }>;
+};
+
+async function getJson<T>(url: string, revalidate = REVALIDATE_SEC): Promise<T | null> {
   try {
     const res = await fetch(url, {
-      next: { revalidate: REVALIDATE_SEC },
+      next: { revalidate },
       headers: { Accept: "application/json" },
     });
     if (!res.ok) {
@@ -165,80 +203,226 @@ function pickThumb(
   );
 }
 
-async function fetchChannel(
-  key: string,
-  channel: YouTubeChannel,
-): Promise<YouTubeHighlight[]> {
-  // Uploads playlist id is the channel id with "UC" swapped for "UU" (1 unit)
-  const uploads = `UU${channel.id.slice(2)}`;
+function apiKey() {
+  return process.env.YOUTUBE_API_KEY?.trim() || null;
+}
+
+/** Latest uploads of a channel (1 quota unit). */
+async function fetchUploads(key: string, channelId: string, max = 30): Promise<Candidate[]> {
+  const uploads = `UU${channelId.slice(2)}`;
   const list = await getJson<PlaylistItemsResponse>(
-    `${API}/playlistItems?part=snippet&maxResults=30&playlistId=${uploads}&key=${encodeURIComponent(key)}`,
+    `${API}/playlistItems?part=snippet&maxResults=${max}&playlistId=${uploads}&key=${encodeURIComponent(key)}`,
   );
-  const candidates = (list?.items ?? [])
+  return (list?.items ?? [])
     .map((it) => ({
       videoId: it.snippet?.resourceId?.videoId ?? "",
       title: it.snippet?.title ?? "",
       publishedAt: it.snippet?.publishedAt ?? "",
+      channelTitle: it.snippet?.channelTitle,
       thumbs: it.snippet?.thumbnails,
     }))
-    .filter((c) => c.videoId && c.title && looksLikeHighlight(c.title));
-  if (!candidates.length) return [];
+    .filter((c) => c.videoId && c.title);
+}
 
-  // Drop shorts, full matches and anything the league disabled embedding for (1 unit)
-  const details = await getJson<VideosResponse>(
-    `${API}/videos?part=status,contentDetails&id=${candidates
-      .map((c) => c.videoId)
-      .join(",")}&key=${encodeURIComponent(key)}`,
-  );
-  const meta = new Map(
-    (details?.items ?? []).map((v) => [
-      v.id ?? "",
-      {
-        embeddable: v.status?.embeddable !== false,
-        pub: v.status?.privacyStatus ?? "public",
-        duration: parseIsoDuration(v.contentDetails?.duration),
-      },
-    ]),
-  );
-
-  const out: YouTubeHighlight[] = [];
-  for (const c of candidates) {
-    const m = meta.get(c.videoId);
-    if (!m || !m.embeddable || m.pub !== "public") continue;
-    if (m.duration < 60 || m.duration > 30 * 60) continue;
-    out.push({
-      videoId: c.videoId,
-      title: c.title,
-      publishedAt: c.publishedAt,
-      thumbnailUrl: pickThumb(c.thumbs, c.videoId),
-      competitionLabel: channel.label,
-      durationSec: m.duration,
-    });
+/** Embeddable + public + sane duration (1 unit per 50 ids). */
+async function enrich(
+  key: string,
+  candidates: Candidate[],
+  bounds: { min: number; max: number },
+): Promise<(Candidate & { durationSec: number })[]> {
+  const out: (Candidate & { durationSec: number })[] = [];
+  for (let i = 0; i < candidates.length; i += 50) {
+    const chunk = candidates.slice(i, i + 50);
+    const details = await getJson<VideosResponse>(
+      `${API}/videos?part=status,contentDetails&id=${chunk
+        .map((c) => c.videoId)
+        .join(",")}&key=${encodeURIComponent(key)}`,
+    );
+    const meta = new Map(
+      (details?.items ?? []).map((v) => [
+        v.id ?? "",
+        {
+          embeddable: v.status?.embeddable !== false,
+          pub: v.status?.privacyStatus ?? "public",
+          duration: parseIsoDuration(v.contentDetails?.duration),
+        },
+      ]),
+    );
+    for (const c of chunk) {
+      const m = meta.get(c.videoId);
+      if (!m || !m.embeddable || m.pub !== "public") continue;
+      if (m.duration < bounds.min || m.duration > bounds.max) continue;
+      out.push({ ...c, durationSec: m.duration });
+    }
   }
   return out;
 }
 
-export function hasYouTubeKey(): boolean {
-  return Boolean(process.env.YOUTUBE_API_KEY?.trim());
+const HIGHLIGHT_BOUNDS = { min: 60, max: 30 * 60 };
+
+async function fetchChannelHighlights(
+  key: string,
+  channel: YouTubeChannel,
+): Promise<YouTubeHighlight[]> {
+  const candidates = (await fetchUploads(key, channel.id)).filter((c) =>
+    looksLikeHighlight(c.title),
+  );
+  if (!candidates.length) return [];
+  const ok = await enrich(key, candidates, HIGHLIGHT_BOUNDS);
+  return ok.map((c) => ({
+    videoId: c.videoId,
+    title: c.title,
+    publishedAt: c.publishedAt,
+    thumbnailUrl: pickThumb(c.thumbs, c.videoId),
+    competitionLabel: channel.label,
+    durationSec: c.durationSec,
+    channelTitle: c.channelTitle,
+  }));
 }
 
-export async function fetchYouTubeHighlights(): Promise<YouTubeHighlight[]> {
-  const key = process.env.YOUTUBE_API_KEY?.trim();
-  if (!key) return [];
+/**
+ * Last resort when the day is thin: YouTube search (100 units per query).
+ * Restricted to embeddable, medium-length videos from the last 36 hours.
+ */
+async function searchRecentHighlights(key: string): Promise<YouTubeHighlight[]> {
+  const after = new Date(Date.now() - 36 * 3_600_000).toISOString();
+  const queries = ["football highlights", "soccer highlights goals"];
+  const found: Candidate[] = [];
+  for (const q of queries) {
+    const res = await getJson<SearchResponse>(
+      `${API}/search?part=snippet&type=video&videoEmbeddable=true&videoSyndicated=true&videoDuration=medium&order=date&maxResults=25&publishedAfter=${encodeURIComponent(after)}&q=${encodeURIComponent(q)}&key=${encodeURIComponent(key)}`,
+      60 * 60,
+    );
+    for (const it of res?.items ?? []) {
+      const id = it.id?.videoId;
+      const title = it.snippet?.title ?? "";
+      if (!id || !looksLikeHighlight(title)) continue;
+      found.push({
+        videoId: id,
+        title,
+        publishedAt: it.snippet?.publishedAt ?? "",
+        channelTitle: it.snippet?.channelTitle,
+        thumbs: it.snippet?.thumbnails,
+      });
+    }
+  }
+  if (!found.length) return [];
+  const ok = await enrich(key, found, HIGHLIGHT_BOUNDS);
+  return ok.map((c) => ({
+    videoId: c.videoId,
+    title: c.title,
+    publishedAt: c.publishedAt,
+    thumbnailUrl: pickThumb(c.thumbs, c.videoId),
+    competitionLabel: c.channelTitle ? `WORLD: ${c.channelTitle}` : "WORLD: Football",
+    durationSec: c.durationSec,
+    channelTitle: c.channelTitle,
+  }));
+}
 
-  const perChannel = await Promise.all(
-    YOUTUBE_CHANNELS.map((c) => fetchChannel(key, c).catch(() => [])),
-  );
+export function hasYouTubeKey(): boolean {
+  return Boolean(apiKey());
+}
 
+function countFresh(videos: YouTubeHighlight[], hours = 24) {
+  const cutoff = Date.now() - hours * 3_600_000;
+  return videos.filter((v) => +new Date(v.publishedAt) >= cutoff).length;
+}
+
+function dedupe(videos: YouTubeHighlight[]) {
   const seen = new Set<string>();
   const out: YouTubeHighlight[] = [];
-  for (const v of perChannel.flat()) {
+  for (const v of videos) {
     if (seen.has(v.videoId)) continue;
     seen.add(v.videoId);
     out.push(v);
   }
   out.sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
   return out;
+}
+
+/**
+ * Tier-1 channels first. If fewer than MIN_FRESH_PER_DAY clips landed in the
+ * last 24h we widen to tier-2 channels, and if it is still thin we search.
+ */
+export async function fetchYouTubeHighlights(): Promise<
+  YouTubeHighlight[]
+> {
+  const key = apiKey();
+  if (!key) return [];
+
+  const tier1 = YOUTUBE_CHANNELS.filter((c) => c.tier === 1);
+  let videos = dedupe(
+    (
+      await Promise.all(tier1.map((c) => fetchChannelHighlights(key, c).catch(() => [])))
+    ).flat(),
+  );
+
+  if (countFresh(videos) < MIN_FRESH_PER_DAY) {
+    const tier2 = YOUTUBE_CHANNELS.filter((c) => c.tier === 2);
+    const more = (
+      await Promise.all(tier2.map((c) => fetchChannelHighlights(key, c).catch(() => [])))
+    ).flat();
+    videos = dedupe([...videos, ...more]);
+  }
+
+  if (countFresh(videos) < MIN_FRESH_PER_DAY) {
+    const searched = await searchRecentHighlights(key).catch(() => []);
+    videos = dedupe([...videos, ...searched]);
+  }
+
+  return videos;
+}
+
+// ---------------------------------------------------------------------------
+// Training videos (the Train tab)
+// ---------------------------------------------------------------------------
+
+export type TrainingVideo = {
+  videoId: string;
+  title: string;
+  publishedAt: string;
+  thumbnailUrl: string | null;
+  channelTitle: string;
+  durationSec: number;
+};
+
+export const TRAINING_CHANNELS: { id: string; name: string }[] = [
+  { id: "UC0Ik25PHaiHCbfGrzu-lBFQ", name: "AllAttack" },
+  { id: "UC9xRcqG8V6yNi6Hum92EoGg", name: "7mlc" },
+  { id: "UC5SQGzkWyQSW_fe-URgq7xw", name: "Unisport" },
+  { id: "UCFfFE-6nfCHz4uDZ-08o6ng", name: "Become Elite" },
+  { id: "UCkZM4O__WAhfWIsuH9BeRHw", name: "Progressive Soccer" },
+  { id: "UC5wlBUZsx1r2IsO9-rvON6Q", name: "Joner Football" },
+  { id: "UC2nxiSem4cVcNxUqlGf8YVg", name: "Soccer Drills" },
+];
+
+const TRAINING_BOUNDS = { min: 90, max: 45 * 60 };
+
+/** Latest coaching videos from trusted training channels (2 units/channel). */
+export async function fetchTrainingVideos(): Promise<TrainingVideo[]> {
+  const key = apiKey();
+  if (!key) return [];
+  const per = await Promise.all(
+    TRAINING_CHANNELS.map(async (ch) => {
+      const cands = (await fetchUploads(key, ch.id, 25)).filter(
+        (c) => !/#shorts|\bshorts\b|\bpodcast\b/i.test(c.title),
+      );
+      const ok = await enrich(key, cands, TRAINING_BOUNDS);
+      return ok.map((c) => ({
+        videoId: c.videoId,
+        title: c.title,
+        publishedAt: c.publishedAt,
+        thumbnailUrl: pickThumb(c.thumbs, c.videoId),
+        channelTitle: ch.name,
+        durationSec: c.durationSec,
+      }));
+    }),
+  );
+  const seen = new Set<string>();
+  return per
+    .flat()
+    .filter((v) => (seen.has(v.videoId) ? false : (seen.add(v.videoId), true)))
+    .sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
 }
 
 export function youTubeEmbedUrl(videoId: string) {

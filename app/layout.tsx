@@ -1,11 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import { Big_Shoulders, Bricolage_Grotesque, Onest } from "next/font/google";
+import { Suspense } from "react";
 import { AdsenseLoader } from "@/components/ads/adsense-loader";
 import { LivingBackdrop } from "@/components/atmosphere/living-backdrop";
 import { AuthHashHandler } from "@/components/auth/auth-hash-handler";
 import { AppChrome } from "@/components/layout/app-chrome";
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import { QuickRail } from "@/components/layout/quick-rail";
+import { ProFlag } from "@/components/pro/pro-flag";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { StayLoopHost } from "@/components/layout/stay-loop-host";
@@ -56,6 +58,9 @@ export default function RootLayout({
         <LivingBackdrop />
         <div className="relative z-10 flex min-h-full flex-1 flex-col">
           <AdsenseLoader />
+          <Suspense fallback={null}>
+            <ProFlag />
+          </Suspense>
           <AuthHashHandler />
           <AppChrome header={<SiteHeader />} footer={<SiteFooter />}>
             {children}

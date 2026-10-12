@@ -17,6 +17,7 @@ export function StayLoop({
   if (
     pathname.startsWith("/clips") ||
     pathname.startsWith("/call") ||
+    pathname.startsWith("/pitch") ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/signup")
   ) {

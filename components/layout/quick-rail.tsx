@@ -5,13 +5,13 @@ import { usePathname } from "next/navigation";
 
 /** Secondary modes — the header already covers the main tabs */
 const JUMP = [
+  { href: "/pitch", label: "Pitch" },
+  { href: "/pundit", label: "Pundit" },
+  { href: "/train", label: "Train" },
   { href: "/call", label: "Call" },
-  { href: "/feed", label: "Missions" },
-  { href: "/predictor", label: "Predict" },
-  { href: "/rival", label: "Rival" },
-  { href: "/leaderboard", label: "IQ" },
-  { href: "/follow", label: "Follow" },
-  { href: "/rooms", label: "Clubs" },
+  { href: "/topbins", label: "Bins" },
+  { href: "/fantasy", label: "Fantasy" },
+  { href: "/pro", label: "Pro" },
 ] as const;
 
 /** Fun desktop jump rail — one-tap paths without digging through More. */

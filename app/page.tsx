@@ -158,6 +158,17 @@ export default async function Home() {
           <div className="fs-section-head mb-1">
             <p className="fs-kicker">Stay in it</p>
           </div>
+          <Link href="/pitch" className="fs-board group flex items-center gap-4 px-3 py-5">
+            <div className="min-w-0 flex-1">
+              <p className="fs-display text-xl text-[var(--beige)] sm:text-2xl">
+                The Pitch
+              </p>
+              <p className="mt-1 text-sm text-[var(--beige-dim)] group-hover:text-[var(--beige-muted)]">
+                One ball. One street. The whole planet. One touch a day.
+              </p>
+            </div>
+            <span className="shrink-0 text-sm text-[var(--sky)]">Kick →</span>
+          </Link>
           <Link href="/call" className="fs-board group flex items-center gap-4 px-3 py-5">
             <div className="min-w-0 flex-1">
               <p className="fs-display text-xl text-[var(--beige)] sm:text-2xl">

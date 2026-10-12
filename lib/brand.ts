@@ -39,15 +39,20 @@ export const NAV_LINKS = [
 /** Main paths people use every session */
 export const PRIMARY_NAV = [
   { href: "/", label: "Home" },
-  { href: "/call", label: "The Call" },
-  { href: "/matches", label: "Matches" },
   { href: "/clips", label: "Clips" },
-  { href: "/fantasy", label: "Fantasy" },
-  { href: "/chat", label: "Chat" },
+  { href: "/pitch", label: "The Pitch" },
+  { href: "/matches", label: "Matches" },
+  { href: "/train", label: "Train" },
 ] as const;
 
 /** Everything else — keep out of the main path */
 export const MORE_NAV = [
+  { href: "/pundit", label: "AI Pundit" },
+  { href: "/call", label: "The Call" },
+  { href: "/topbins", label: "Top Bins" },
+  { href: "/fantasy", label: "Fantasy" },
+  { href: "/pro", label: "Go Pro" },
+  { href: "/chat", label: "Chat" },
   { href: "/shots", label: "Shots" },
   { href: "/feed", label: "Today's missions" },
   { href: "/predictor", label: "Predictor" },

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { recordClipView, toggleClipLike } from "@/app/clips/actions";
 import { withEmbedPlayback } from "@/lib/football-api/scorebat";
 
 export type ClipReelItem = {
@@ -14,14 +15,28 @@ export type ClipReelItem = {
   thumbnailUrl?: string | null;
   matchId: string;
   matchLabel: string;
+  /** "official" or an uploader's username */
   author: string;
+  uploaderId?: string | null;
   likes: number;
+  views?: number;
+  liked?: boolean;
   accent: "sky" | "beige" | "live";
   competitionLabel?: string | null;
   happenedAt?: string | null;
+  caption?: string | null;
 };
 
-function formatLikes(n: number) {
+export type ReelTabKey = "fyp" | "following" | "friends";
+
+const TABS: { key: ReelTabKey; label: string }[] = [
+  { key: "fyp", label: "For You" },
+  { key: "following", label: "Following" },
+  { key: "friends", label: "Friends" },
+];
+
+function formatCount(n: number) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
 }
@@ -61,22 +76,29 @@ function ClipSlide({
   clip,
   active,
   soundOn,
+  signedIn,
   onToggleSound,
 }: {
   clip: ClipReelItem;
   active: boolean;
   soundOn: boolean;
+  signedIn: boolean;
   onToggleSound: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pausedRef = useRef(false);
   const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [liked, setLiked] = useState(false);
+  const activeSince = useRef<number | null>(null);
+  const [liked, setLiked] = useState(Boolean(clip.liked));
+  const [likeCount, setLikeCount] = useState(clip.likes);
+  const [likeBurst, setLikeBurst] = useState(false);
   const [paused, setPaused] = useState(false);
   const [flash, setFlash] = useState(false);
   const [tapArmed, setTapArmed] = useState(true);
   const [embedReady, setEmbedReady] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
 
   const hasEmbed = Boolean(clip.embedUrl);
   const hasFile = Boolean(clip.videoUrl) && !hasEmbed;
@@ -102,15 +124,29 @@ function ClipSlide({
     };
   }, []);
 
+  // Watch-time tracking: what the For You ranking learns from
   useEffect(() => {
-    if (!active) {
+    if (active) {
+      activeSince.current = Date.now();
+      return () => {
+        const started = activeSince.current;
+        activeSince.current = null;
+        if (!started) return;
+        const watched = Date.now() - started;
+        const completed = watched > 25_000;
+        void recordClipView(clip.id, watched, completed);
+      };
+    }
+    // Reset transient UI when the slide scrolls away
+    const t = setTimeout(() => {
       pausedRef.current = false;
       setPaused(false);
       setFlash(false);
       setTapArmed(true);
       setEmbedReady(false);
-    }
-  }, [active]);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [active, clip.id]);
 
   // Native file video only
   useEffect(() => {
@@ -142,10 +178,35 @@ function ClipSlide({
     disarmBriefly();
   }
 
+  function onLike() {
+    if (!signedIn) {
+      setHint("Sign in to like clips");
+      setTimeout(() => setHint(null), 1800);
+      return;
+    }
+    const next = !liked;
+    setLiked(next);
+    setLikeCount((c) => Math.max(0, c + (next ? 1 : -1)));
+    if (next) {
+      setLikeBurst(true);
+      setTimeout(() => setLikeBurst(false), 500);
+    }
+    startTransition(async () => {
+      const res = await toggleClipLike(clip.id);
+      if (res.error) {
+        setLiked(!next);
+        setLikeCount((c) => Math.max(0, c + (next ? -1 : 1)));
+        setHint(res.error);
+        setTimeout(() => setHint(null), 2200);
+      }
+    });
+  }
+
+  const isOfficial = clip.author === "official";
+
   return (
     <article className="clips-slide relative h-[100dvh] w-full snap-start snap-always overflow-hidden bg-black">
       <div className="absolute inset-0 z-0">
-        {/* Poster while embed loads — avoids black flash */}
         {hasEmbed && clip.thumbnailUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -211,7 +272,6 @@ function ClipSlide({
         {hasFile ? <PlayFlash show={flash} paused={paused} /> : null}
       </div>
 
-      {/* Custom pause only for uploaded file clips — never for ScoreBat embeds */}
       {hasFile && active && !paused && tapArmed ? (
         <div
           role="presentation"
@@ -236,6 +296,14 @@ function ClipSlide({
         className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] h-[40%] bg-gradient-to-t from-black via-black/55 to-transparent"
       />
 
+      {hint ? (
+        <div className="pointer-events-none absolute inset-x-0 top-24 z-50 flex justify-center">
+          <span className="fs-fade-up rounded-full bg-black/70 px-4 py-1.5 text-xs font-semibold text-white ring-1 ring-white/15">
+            {hint}
+          </span>
+        </div>
+      ) : null}
+
       <div className="absolute bottom-28 right-2 z-50 flex w-16 flex-col items-center gap-4 sm:right-4">
         <button
           type="button"
@@ -252,17 +320,19 @@ function ClipSlide({
 
         <button
           type="button"
-          onClick={() => setLiked((v) => !v)}
+          onClick={onLike}
           className="flex flex-col items-center gap-1"
           aria-label={liked ? "Unlike" : "Like"}
         >
           <span
-            className={`flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-lg ring-1 ring-white/25 backdrop-blur-md ${liked ? "text-[var(--live)]" : "text-[var(--beige)]"}`}
+            className={`flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-lg ring-1 ring-white/25 backdrop-blur-md transition ${
+              liked ? "text-[var(--live)]" : "text-[var(--beige)]"
+            } ${likeBurst ? "fs-like-burst" : ""}`}
           >
             ♥
           </span>
           <span className="text-[11px] text-[var(--beige-muted)]">
-            {formatLikes(clip.likes + (liked ? 1 : 0))}
+            {formatCount(likeCount)}
           </span>
         </button>
 
@@ -275,7 +345,14 @@ function ClipSlide({
           </Link>
         ) : null}
 
-        {clip.matchId !== "matches" ? (
+        {!isOfficial && clip.uploaderId ? (
+          <Link
+            href={`/u/${clip.author}`}
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-[10px] font-bold text-[var(--sky)] ring-1 ring-white/25 backdrop-blur-md"
+          >
+            @
+          </Link>
+        ) : clip.matchId !== "matches" ? (
           <Link
             href={`/matches/${clip.matchId}`}
             className="flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-[10px] font-bold text-[var(--sky)] ring-1 ring-white/25 backdrop-blur-md"
@@ -293,8 +370,12 @@ function ClipSlide({
         <h2 className="fs-display mt-2 max-w-[78%] text-2xl font-semibold leading-snug text-[var(--beige)]">
           {clip.title}
         </h2>
+        {clip.caption ? (
+          <p className="mt-1.5 max-w-[78%] text-sm text-[var(--beige-muted)]">{clip.caption}</p>
+        ) : null}
         <p className="mt-2 text-sm text-[var(--beige-muted)]">
-          {clip.author === "official" ? "Official match video · sound on" : `@${clip.author}`}
+          {isOfficial ? "Official match video · sound on" : `@${clip.author} · fan clip`}
+          {clip.views ? ` · ${formatCount(clip.views)} views` : ""}
         </p>
         {clip.matchId !== "matches" ? (
           <div className="pointer-events-auto mt-4 flex flex-wrap gap-2">
@@ -317,12 +398,72 @@ function ClipSlide({
   );
 }
 
-export function ClipsReel({ clips }: { clips: ClipReelItem[] }) {
+function EmptyTab({ tab, signedIn }: { tab: ReelTabKey; signedIn: boolean }) {
+  const copy =
+    tab === "following"
+      ? {
+          title: "Follow a club to fill this tab",
+          body: "Clips from the teams you follow land here first — goals, highlights and fan uploads.",
+          cta: { href: "/follow", label: "Follow teams" },
+        }
+      : tab === "friends"
+        ? {
+            title: signedIn ? "No friend clips yet" : "Sign in to see friends' clips",
+            body: signedIn
+              ? "Follow people from their profile, or post the first clip yourself."
+              : "Clips posted by the people you follow show up here.",
+            cta: signedIn
+              ? { href: "/clips/upload", label: "Post a clip" }
+              : { href: "/login", label: "Sign in" },
+          }
+        : {
+            title: "Tonight's tape is loading",
+            body: "Official league highlights with audio. Add YOUTUBE_API_KEY in Vercel if this stays empty.",
+            cta: { href: "/matches", label: "Browse matches" },
+          };
+
+  return (
+    <div className="flex h-[100dvh] snap-start flex-col items-center justify-center bg-[var(--ink)] px-6 text-center">
+      <p className="text-xs font-medium uppercase tracking-[0.2em] text-[var(--sky)]">Clips</p>
+      <h1 className="fs-display mt-4 text-3xl text-[var(--beige)]">{copy.title}</h1>
+      <p className="mt-3 max-w-sm text-sm text-[var(--beige-muted)]">{copy.body}</p>
+      <Link href={copy.cta.href} className="fs-btn-primary mt-8">
+        {copy.cta.label}
+      </Link>
+    </div>
+  );
+}
+
+export function ClipsReel({
+  clips,
+  tab = "fyp",
+  counts,
+  signedIn = false,
+  startId,
+}: {
+  clips: ClipReelItem[];
+  tab?: ReelTabKey;
+  counts?: Partial<Record<ReelTabKey, number>>;
+  signedIn?: boolean;
+  startId?: string | null;
+}) {
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(() => {
+    if (!startId) return 0;
+    const i = clips.findIndex((c) => c.id === startId);
+    return i >= 0 ? i : 0;
+  });
   const [soundOn, setSoundOn] = useState(false);
 
   const toggleSound = useCallback(() => setSoundOn((v) => !v), []);
+
+  // Jump to a deep-linked clip
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || !startId) return;
+    const i = clips.findIndex((c) => c.id === startId);
+    if (i > 0) el.scrollTo({ top: i * el.clientHeight });
+  }, [startId, clips]);
 
   const onScroll = useCallback(() => {
     const el = scrollerRef.current;
@@ -331,51 +472,74 @@ export function ClipsReel({ clips }: { clips: ClipReelItem[] }) {
     setActiveIndex(Math.max(0, Math.min(clips.length - 1, idx)));
   }, [clips.length]);
 
-  if (clips.length === 0) {
-    return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-[var(--ink)] px-6 text-center">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-[var(--sky)]">
-          Clips
-        </p>
-        <h1 className="fs-display mt-4 text-3xl text-[var(--beige)]">
-          Tonight&apos;s tape is loading
-        </h1>
-        <p className="mt-3 max-w-sm text-sm text-[var(--beige-muted)]">
-          Official league highlights with audio. Add YOUTUBE_API_KEY in Vercel
-          if this stays empty.
-        </p>
-        <Link href="/matches" className="fs-btn-primary mt-8">
-          Browse matches
-        </Link>
-      </div>
-    );
-  }
-
   return (
     <div className="relative bg-black">
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
-          <div className="rounded-full bg-black/40 px-3 py-1.5 text-xs font-semibold text-[var(--beige)] ring-1 ring-white/10">
-          Tonight&apos;s tape
-        </div>
-        <div className="rounded-full bg-black/40 px-3 py-1.5 text-[11px] text-[var(--beige-dim)] ring-1 ring-white/10">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-2 px-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <Link
+          href="/"
+          className="pointer-events-auto grid h-9 w-9 place-items-center rounded-full bg-black/45 text-[var(--beige)] ring-1 ring-white/10"
+          aria-label="Home"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z" />
+          </svg>
+        </Link>
+        <nav className="pointer-events-auto fs-reel-tabs flex items-center gap-1 rounded-full bg-black/45 p-1 ring-1 ring-white/10 backdrop-blur-md">
+          {TABS.map((t) => {
+            const active = t.key === tab;
+            const n = counts?.[t.key];
+            return (
+              <Link
+                key={t.key}
+                href={t.key === "fyp" ? "/clips" : `/clips?tab=${t.key}`}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  active
+                    ? "bg-[var(--beige)] text-[var(--ink)]"
+                    : "text-[var(--beige-muted)] hover:text-[var(--beige)]"
+                }`}
+              >
+                {t.label}
+                {!active && n ? <span className="ml-1 opacity-60">{n}</span> : null}
+              </Link>
+            );
+          })}
+        </nav>
+        <Link
+          href={signedIn ? "/clips/upload" : "/login?next=/clips/upload"}
+          className="pointer-events-auto grid h-9 w-9 place-items-center rounded-full bg-[var(--sky)] text-[var(--ink)] ring-1 ring-[var(--sky)]"
+          aria-label="Post a clip"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </Link>
+      </div>
+
+      {clips.length > 0 ? (
+        <div className="pointer-events-none absolute right-3 top-[calc(max(0.75rem,env(safe-area-inset-top))+2.9rem)] z-30 rounded-full bg-black/40 px-2.5 py-1 text-[11px] text-[var(--beige-dim)] ring-1 ring-white/10">
           {activeIndex + 1} / {clips.length}
         </div>
-      </div>
+      ) : null}
 
       <div
         ref={scrollerRef}
         onScroll={onScroll}
         className="h-[100dvh] snap-y snap-mandatory overflow-y-auto overscroll-y-contain"
       >
-        {clips.map((clip, i) => (
-          <ClipSlide
-            key={clip.id}
-            clip={clip}
-            active={i === activeIndex}
-            soundOn={soundOn}
-            onToggleSound={toggleSound}
-          />
-        ))}
+        {clips.length === 0 ? (
+          <EmptyTab tab={tab} signedIn={signedIn} />
+        ) : (
+          clips.map((clip, i) => (
+            <ClipSlide
+              key={clip.id}
+              clip={clip}
+              active={i === activeIndex}
+              soundOn={soundOn}
+              signedIn={signedIn}
+              onToggleSound={toggleSound}
+            />
+          ))
+        )}
       </div>
     </div>
   );
