@@ -14,11 +14,7 @@ export function DesktopPrimaryNav() {
         const active =
           link.href === "/matches"
             ? pathname.startsWith("/matches")
-            : link.href === "/shots"
-              ? pathname.startsWith("/shots") ||
-                pathname.startsWith("/players") ||
-                pathname.startsWith("/teams")
-              : pathname === link.href || pathname.startsWith(`${link.href}/`);
+            : pathname === link.href || pathname.startsWith(`${link.href}/`);
         return (
           <Link
             key={link.href}

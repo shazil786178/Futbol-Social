@@ -36,6 +36,7 @@ export type Highlight = {
   thumbnailUrl: string | null;
   source: string | null;
   competitionLabel: string | null;
+  happenedAt?: string | null;
 };
 
 export type Skit = {

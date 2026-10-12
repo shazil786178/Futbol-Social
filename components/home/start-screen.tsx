@@ -15,6 +15,7 @@ import {
   statusClockLabel,
 } from "@/lib/matches/format";
 import type { Match } from "@/lib/matches/types";
+import { loadCallBoard } from "@/lib/call/today";
 import { getDailyState } from "@/lib/streaks/daily";
 
 export type StartProfile = {
@@ -116,7 +117,7 @@ export async function StartScreen({
   userId: string;
   profile: StartProfile;
 }) {
-  const [matches, daily, iqEvents, fantasy, rankRes] = await Promise.all([
+  const [matches, daily, iqEvents, fantasy, rankRes, call] = await Promise.all([
     listMatches(),
     getDailyState(supabase, userId),
     listIqEvents(userId),
@@ -125,6 +126,7 @@ export async function StartScreen({
       .from("profiles")
       .select("id", { count: "exact", head: true })
       .gt("football_iq", profile.football_iq),
+    loadCallBoard(supabase, userId),
   ]);
 
   const iqRank = (rankRes.count ?? 0) + 1;
@@ -273,6 +275,18 @@ export async function StartScreen({
         </div>
 
         <aside className="space-y-4 fs-fade-up-delay-2">
+          <Link
+            href="/call"
+            className="fs-panel block px-5 py-5 transition hover:border-[var(--sky)]"
+          >
+            <p className="fs-kicker">The Call · {call.closed ? "Closed" : "Open"}</p>
+            <p className="fs-display mt-2 text-xl leading-snug">{call.call.question}</p>
+            <p className="mt-2 text-sm text-[var(--beige-muted)]">
+              {call.myChoice
+                ? "You're on the board. Come back at midnight."
+                : `${call.call.optionA} or ${call.call.optionB} — one tap.`}
+            </p>
+          </Link>
           <Link href="/leaderboard" className="fs-panel block px-5 py-5 transition hover:border-[var(--line-strong)]">
             <p className="fs-kicker !text-[var(--gold)]">Futbol IQ</p>
             <div className="mt-2 flex items-end justify-between gap-3">

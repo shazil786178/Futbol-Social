@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type DailyMissionId = "predict" | "chat" | "clip" | "react";
+export type DailyMissionId = "predict" | "chat" | "clip" | "react" | "call";
 
 export type DayProgress = Partial<Record<DailyMissionId, boolean>>;
 
@@ -27,6 +27,12 @@ const MISSIONS: {
   hint: string;
   href: string;
 }[] = [
+  {
+    id: "call",
+    label: "Make The Call",
+    hint: "One tap. The planet's split.",
+    href: "/call",
+  },
   {
     id: "predict",
     label: "Lock a score",

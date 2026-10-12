@@ -15,19 +15,24 @@ export async function StayLoopHost() {
     data: { user },
   } = await supabase.auth.getUser();
   const daily = user ? await getDailyState(supabase, user.id) : null;
+  const callOpen = daily?.missions.find((m) => m.id === "call" && !m.done);
   const nextMission = daily?.missions.find((m) => !m.done);
 
   const liveMatch = live[0];
   const href = liveMatch
     ? `/matches/${liveMatch.id}?tab=chat`
-    : nextMission
-      ? nextMission.href
-      : "/clips";
+    : callOpen
+      ? "/call"
+      : nextMission
+        ? nextMission.href
+        : "/clips";
   const label = liveMatch
     ? `${liveMatch.homeTeam} vs ${liveMatch.awayTeam}`
-    : nextMission
-      ? nextMission.label
-      : "Watch a clip";
+    : callOpen
+      ? "The Call is open"
+      : nextMission
+        ? nextMission.label
+        : "Watch tonight's tape";
 
   return (
     <>

@@ -33,18 +33,32 @@ export type SyncedHighlight = {
   embedUrl: string | null;
   videoTitle: string;
   sortOrder: number;
+  happenedAt: string;
 };
 
 function extractEmbedUrl(embed: string): string | null {
   const m = embed.match(/src=['"]([^'"]+)['"]/i);
   if (!m?.[1]) return null;
   try {
-    const url = new URL(m[1]);
-    // Prefer autoplay when the slide is focused; keep publisher quality
-    url.searchParams.set("autoplay", "1");
-    return url.toString();
+    return new URL(m[1]).toString();
   } catch {
     return m[1];
+  }
+}
+
+/** ScoreBat player: autoplay + sound after a user tap (browsers block unmuted autoplay). */
+export function withEmbedPlayback(
+  raw: string,
+  opts: { autoplay: boolean; sound: boolean },
+): string {
+  try {
+    const url = new URL(raw);
+    url.searchParams.set("autoplay", opts.autoplay ? "true" : "false");
+    url.searchParams.set("startMUTED", opts.sound ? "false" : "true");
+    url.searchParams.set("muted", opts.sound ? "0" : "1");
+    return url.toString();
+  } catch {
+    return raw;
   }
 }
 
@@ -160,8 +174,10 @@ export async function fetchScoreBatHighlights(): Promise<ScoreBatMatch[]> {
       `https://www.scorebat.com/video-api/v3/free-feed/?token=${encodeURIComponent(token)}`,
     );
   }
-  // Public (legacy) feed — real league highlights, embeddable from official sources
-  urls.push("https://www.scorebat.com/video-api/v3/");
+  urls.push(
+    "https://www.scorebat.com/video-api/v3/",
+    "https://www.scorebat.com/video-api/v3/feed/",
+  );
 
   for (const url of urls) {
     const rows = await fetchJson(url);
@@ -232,6 +248,7 @@ export function flattenScoreBatHighlights(
         embedUrl,
         videoTitle: video.title,
         sortOrder: sort++,
+        happenedAt: m.date,
       });
     }
   }

@@ -17,6 +17,7 @@ import { notifyFollowersOfMatchUpdates } from "@/lib/features/follows";
 import { closeOpenTribunalsForMatch } from "@/lib/features/tribunals";
 import { processOracleSeason } from "@/lib/iq/oracle-score";
 import { processFinishedMatches } from "@/lib/iq/process-match";
+import { ensureTodayCall } from "@/lib/call/today";
 import { syncUclGoalEvents } from "@/lib/fantasy/sync-goals";
 
 export type SyncJobResult = {
@@ -271,6 +272,21 @@ export async function runSyncJob(
     } catch (err) {
       console.error("ScoreBat highlights sync skipped:", err);
     }
+  }
+
+  if (mode === "live") {
+    try {
+      const hl = await syncScoreBatHighlights(supabase);
+      highlightsUpserted = hl.highlightsUpserted;
+    } catch (err) {
+      console.error("ScoreBat live highlights skipped:", err);
+    }
+  }
+
+  try {
+    await ensureTodayCall(supabase);
+  } catch (err) {
+    console.error("Daily Call skipped:", err);
   }
 
   const iqProcessed = await processFinishedMatches(supabase);

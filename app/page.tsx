@@ -158,6 +158,17 @@ export default async function Home() {
           <div className="fs-section-head mb-1">
             <p className="fs-kicker">Stay in it</p>
           </div>
+          <Link href="/call" className="fs-board group flex items-center gap-4 px-3 py-5">
+            <div className="min-w-0 flex-1">
+              <p className="fs-display text-xl text-[var(--beige)] sm:text-2xl">
+                The Call
+              </p>
+              <p className="mt-1 text-sm text-[var(--beige-dim)] group-hover:text-[var(--beige-muted)]">
+                One question. The whole planet. Closes tonight.
+              </p>
+            </div>
+            <span className="shrink-0 text-sm text-[var(--sky)]">Open →</span>
+          </Link>
           <Link href="/fantasy" className="fs-board group flex items-center gap-4 px-3 py-5">
             <div className="min-w-0 flex-1">
               <p className="fs-display text-xl text-[var(--beige)] sm:text-2xl">
@@ -185,10 +196,10 @@ export default async function Home() {
           <Link href="/clips" className="fs-board group flex items-center gap-4 px-1 py-5">
             <div className="min-w-0 flex-1">
               <p className="fs-display text-xl text-[var(--beige)] sm:text-2xl">
-                Clips that pull you back
+                Tonight&apos;s tape
               </p>
               <p className="mt-1 text-sm text-[var(--beige-dim)] group-hover:text-[var(--beige-muted)]">
-                Swipe the night’s moments. Tap through to the match room.
+                Real match highlights. Video with sound. New ones every day.
               </p>
             </div>
             <span className="shrink-0 text-[11px] uppercase tracking-wider text-[var(--sky)]">

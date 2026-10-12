@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { withEmbedPlayback } from "@/lib/football-api/scorebat";
 
 export type ClipReelItem = {
   id: string;
@@ -17,11 +18,24 @@ export type ClipReelItem = {
   likes: number;
   accent: "sky" | "beige" | "live";
   competitionLabel?: string | null;
+  happenedAt?: string | null;
 };
 
 function formatLikes(n: number) {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
+}
+
+function formatClipDay(iso?: string | null) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) return "Today";
+  const yest = new Date(today);
+  yest.setDate(yest.getDate() - 1);
+  if (d.toDateString() === yest.toDateString()) return "Yesterday";
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
 function PlayFlash({ show, paused }: { show: boolean; paused: boolean }) {
@@ -152,16 +166,34 @@ function ClipSlide({
           />
         ) : null}
 
-        {/* Official highlights: leave the player alone — no custom pause overlay */}
-        {hasEmbed && active ? (
+        {hasEmbed && active && soundOn ? (
           <iframe
-            src={clip.embedUrl!}
+            src={withEmbedPlayback(clip.embedUrl!, { autoplay: true, sound: true })}
             title={clip.title}
             className="absolute inset-0 h-full w-full border-0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
             allowFullScreen
             onLoad={() => setEmbedReady(true)}
           />
+        ) : null}
+
+        {hasEmbed && active && !soundOn ? (
+          <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/35">
+            <button
+              type="button"
+              onClick={onToggleSound}
+              className="pointer-events-auto flex flex-col items-center gap-3"
+            >
+              <span className="fs-play-burst grid h-20 w-20 place-items-center rounded-full bg-[var(--sky)] text-[var(--paper-ink)] shadow-[0_12px_40px_rgba(60,227,154,0.45)]">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </span>
+              <span className="rounded-full bg-black/55 px-4 py-1.5 text-sm font-semibold text-white backdrop-blur">
+                Play with sound
+              </span>
+            </button>
+          </div>
         ) : null}
 
         {hasFile ? (
@@ -255,14 +287,14 @@ function ClipSlide({
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 px-4 pb-24 pr-[4.5rem] pt-6 sm:px-6 sm:pb-28">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--sky)]">
-          {clip.competitionLabel ?? clip.matchLabel}
+          {formatClipDay(clip.happenedAt) ?? "Highlights"}
+          {clip.competitionLabel ? ` · ${clip.competitionLabel}` : ""}
         </p>
         <h2 className="fs-display mt-2 max-w-[78%] text-2xl font-semibold leading-snug text-[var(--beige)]">
           {clip.title}
         </h2>
         <p className="mt-2 text-sm text-[var(--beige-muted)]">
-          {clip.author === "official" ? "Official highlights" : `@${clip.author}`} ·{" "}
-          {clip.duration}
+          {clip.author === "official" ? "Official match video · sound on" : `@${clip.author}`}
         </p>
         {clip.matchId !== "matches" ? (
           <div className="pointer-events-auto mt-4 flex flex-wrap gap-2">
@@ -306,8 +338,12 @@ export function ClipsReel({ clips }: { clips: ClipReelItem[] }) {
           Clips
         </p>
         <h1 className="fs-display mt-4 text-3xl text-[var(--beige)]">
-          Syncing match highlights…
+          Tonight&apos;s tape is loading
         </h1>
+        <p className="mt-3 max-w-sm text-sm text-[var(--beige-muted)]">
+          Official league highlights with audio. Add SCOREBAT_API_TOKEN in Vercel
+          if this stays empty.
+        </p>
         <Link href="/matches" className="fs-btn-primary mt-8">
           Browse matches
         </Link>
@@ -318,8 +354,8 @@ export function ClipsReel({ clips }: { clips: ClipReelItem[] }) {
   return (
     <div className="relative bg-black">
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <div className="rounded-full bg-black/40 px-3 py-1.5 text-xs font-semibold text-[var(--beige)] ring-1 ring-white/10">
-          Clips
+          <div className="rounded-full bg-black/40 px-3 py-1.5 text-xs font-semibold text-[var(--beige)] ring-1 ring-white/10">
+          Tonight&apos;s tape
         </div>
         <div className="rounded-full bg-black/40 px-3 py-1.5 text-[11px] text-[var(--beige-dim)] ring-1 ring-white/10">
           {activeIndex + 1} / {clips.length}

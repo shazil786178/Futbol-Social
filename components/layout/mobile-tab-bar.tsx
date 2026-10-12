@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 const TABS = [
   { href: "/", label: "Home" },
   { href: "/matches", label: "Matches" },
-  { href: "/fantasy", label: "Fantasy" },
+  { href: "/call", label: "Call" },
   { href: "/clips", label: "Clips" },
   { href: "/profile", label: "You" },
 ] as const;
@@ -40,10 +40,11 @@ function TabIcon({ kind }: { kind: TabHref }) {
           <circle cx="12" cy="12" r="2.2" />
         </svg>
       );
-    case "/fantasy":
+    case "/call":
       return (
         <svg {...common}>
-          <path d="M8 4h8l3 3-2.5 2.5V20h-9V9.5L5 7z" />
+          <circle cx="12" cy="12" r="8" />
+          <path d="M12 8v4l3 2" />
         </svg>
       );
     case "/clips":

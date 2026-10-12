@@ -1025,6 +1025,7 @@ pre {
   position: relative;
   display: block;
   margin: 0.6rem 0;
+  animation: fs-fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
   padding: 0.85rem 1rem 0.8rem;
   background: var(--ink-raised);
   color: var(--beige);
@@ -1347,6 +1348,119 @@ pre {
   font-weight: 750;
 }
 
+@keyframes fs-play-burst {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+.fs-play-burst {
+  animation: fs-play-burst 1.6s ease-in-out infinite;
+}
+
+@keyframes fs-call-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    filter: drop-shadow(0 0 18px rgba(60, 227, 154, 0.35));
+  }
+}
+
+.fs-call-kicker {
+  animation: fs-call-glow 2.8s ease-in-out infinite;
+}
+
+.fs-call-tape {
+  height: min(42vw, 220px);
+  border-radius: calc(var(--radius) + 4px);
+  border: 1px solid var(--line);
+  background: #000;
+}
+
+.fs-call-side {
+  position: relative;
+  overflow: hidden;
+  border-radius: calc(var(--radius) + 8px);
+  border: 1px solid var(--line);
+  padding: 1.4rem 1.1rem 1.25rem;
+  text-align: left;
+  color: var(--beige);
+  background: var(--ink-raised);
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease;
+}
+
+.fs-call-side:hover:not(:disabled) {
+  transform: translateY(-3px) rotate(-0.4deg);
+  border-color: var(--sky);
+}
+
+.fs-call-side--b:hover:not(:disabled) {
+  transform: translateY(-3px) rotate(0.4deg);
+  border-color: var(--gold);
+}
+
+.fs-call-side:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.fs-call-side--mine {
+  border-color: var(--sky);
+  box-shadow: 0 0 0 1px var(--sky);
+}
+
+.fs-call-side--won {
+  background:
+    radial-gradient(ellipse at top, var(--sky-glow), transparent 60%),
+    var(--ink-raised);
+}
+
+.fs-call-side__name {
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.fs-call-bar {
+  display: block;
+  height: 4px;
+  margin-top: 0.85rem;
+  border-radius: 99px;
+  background: var(--sky);
+  transform-origin: left center;
+  animation: fs-sweep 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes fs-sweep {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+.fs-page-in {
+  animation: fs-fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.fs-btn-primary {
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.fs-btn-primary:active {
+  transform: translateY(1px) scale(0.98);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .fs-fade-up,
   .fs-fade-up-delay,
@@ -1354,7 +1468,12 @@ pre {
   .fs-fade-in,
   .fs-ticker,
   .fs-live-dot,
-  .fs-ticket__score--fresh {
+  .fs-ticket,
+  .fs-ticket__score--fresh,
+  .fs-play-burst,
+  .fs-call-kicker,
+  .fs-call-bar,
+  .fs-page-in {
     animation: none !important;
   }
 }

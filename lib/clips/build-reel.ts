@@ -26,6 +26,9 @@ export function buildClipReel(
   });
 
   playable.sort((a, b) => {
+    const aTime = a.happenedAt ? +new Date(a.happenedAt) : 0;
+    const bTime = b.happenedAt ? +new Date(b.happenedAt) : 0;
+    if (bTime !== aTime) return bTime - aTime;
     const aEmbed = a.embedUrl || (isScoreBatEmbed(a.videoUrl) ? a.videoUrl : null);
     const bEmbed = b.embedUrl || (isScoreBatEmbed(b.videoUrl) ? b.videoUrl : null);
     const aScore =
@@ -37,7 +40,17 @@ export function buildClipReel(
     return bScore - aScore;
   });
 
-  return playable.slice(0, 40).map((h, i) => {
+  const newest = playable[0]?.happenedAt
+    ? +new Date(playable[0].happenedAt)
+    : 0;
+  const freshWindow = 12 * 86_400_000;
+  const fresh = playable.filter((h) => {
+    if (!h.happenedAt) return true;
+    return newest - +new Date(h.happenedAt) < freshWindow;
+  });
+  const pool = fresh.length >= 6 ? fresh : playable;
+
+  return pool.slice(0, 48).map((h, i) => {
     const match = h.matchId ? byId.get(h.matchId) : undefined;
     const embedUrl =
       h.embedUrl || (isScoreBatEmbed(h.videoUrl) ? h.videoUrl : null);
@@ -57,6 +70,7 @@ export function buildClipReel(
       likes: 800 + ((i * 97) % 4200),
       accent: ACCENTS[i % ACCENTS.length]!,
       competitionLabel: h.competitionLabel,
+      happenedAt: h.happenedAt ?? null,
     };
   });
 }
