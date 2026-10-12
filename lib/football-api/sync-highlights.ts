@@ -1,7 +1,12 @@
 import {
   fetchScoreBatHighlights,
   flattenScoreBatHighlights,
+  type SyncedHighlight,
 } from "@/lib/football-api/scorebat";
+import {
+  fetchYouTubeHighlights,
+  flattenYouTubeHighlights,
+} from "@/lib/football-api/youtube";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { COMPETITIONS } from "@/lib/brand";
 
@@ -19,11 +24,15 @@ function isMissingColumnError(message: string) {
   );
 }
 
+/** Official highlights from YouTube league channels (free) + ScoreBat. */
 export async function syncScoreBatHighlights(
   supabase: SupabaseClient,
 ): Promise<{ highlightsUpserted: number; stubMatches: number }> {
-  const feed = await fetchScoreBatHighlights();
-  if (feed.length === 0) {
+  const [youtube, feed] = await Promise.all([
+    fetchYouTubeHighlights().catch(() => []),
+    fetchScoreBatHighlights().catch(() => []),
+  ]);
+  if (youtube.length === 0 && feed.length === 0) {
     return { highlightsUpserted: 0, stubMatches: 0 };
   }
 
@@ -31,15 +40,23 @@ export async function syncScoreBatHighlights(
     .from("matches")
     .select("id, home_team, away_team, kickoff_at");
 
-  const flattened = flattenScoreBatHighlights(
-    feed,
-    (local ?? []).map((m) => ({
-      id: m.id,
-      homeTeam: m.home_team,
-      awayTeam: m.away_team,
-      kickoffAt: m.kickoff_at,
+  const localMatches = (local ?? []).map((m) => ({
+    id: m.id,
+    homeTeam: m.home_team,
+    awayTeam: m.away_team,
+    kickoffAt: m.kickoff_at,
+  }));
+
+  const flattened: (SyncedHighlight & { source: "youtube" | "scorebat" })[] = [
+    ...flattenYouTubeHighlights(youtube, localMatches).map((h) => ({
+      ...h,
+      source: "youtube" as const,
     })),
-  );
+    ...flattenScoreBatHighlights(feed, localMatches).map((h) => ({
+      ...h,
+      source: "scorebat" as const,
+    })),
+  ];
 
   await supabase.from("competitions").upsert(
     COMPETITIONS.active.map((c) => ({ id: c.id, name: c.name })),
@@ -75,7 +92,7 @@ export async function syncScoreBatHighlights(
       home_score: null,
       away_score: null,
       venue: "Highlights",
-      external_id: `scorebat-match-${h.stubMatch.id}`,
+      external_id: `${h.source}-match-${h.stubMatch.id}`,
       last_synced_at: new Date().toISOString(),
     });
   }
@@ -99,29 +116,36 @@ export async function syncScoreBatHighlights(
     embed_html: h.embedHtml,
     embed_url: h.embedUrl,
     thumbnail_url: h.thumbnailUrl,
-    source: "scorebat",
+    source: h.source,
     external_id: h.externalId,
     competition_label: h.competitionLabel,
   }));
 
-  // Legacy shape if migration 013 not applied yet — store ScoreBat embed in video_url
-  const legacyRows = flattened.map((h) => ({
-    match_id: h.matchId,
-    title: h.title.slice(0, 180),
-    duration: "HL",
-    thumbnail_label: h.videoTitle.slice(0, 24) || "HL",
-    sort_order: h.sortOrder,
-    video_url: h.embedUrl,
-  }));
+  // Legacy shape if migration 013 not applied yet — store the embed in video_url.
+  // match_id is NOT NULL before 013, so unlinked rows are skipped there.
+  const legacyRows = flattened
+    .filter((h) => h.matchId)
+    .map((h) => ({
+      match_id: h.matchId,
+      title: h.title.slice(0, 180),
+      duration: "HL",
+      thumbnail_label: h.videoTitle.slice(0, 24) || "HL",
+      sort_order: h.sortOrder,
+      video_url: h.embedUrl,
+    }));
 
   let highlightsUpserted = 0;
   let useLegacy = false;
 
-  // Wipe previous ScoreBat-style rows (embed URLs in video_url) before refresh
+  // Wipe previous official rows (embed URLs in video_url) before refresh
   await supabase
     .from("highlights")
     .delete()
     .like("video_url", "%scorebat.com/embed%");
+  await supabase
+    .from("highlights")
+    .delete()
+    .like("video_url", "%youtube.com/embed%");
 
   const { error: probeError } = await supabase
     .from("highlights")

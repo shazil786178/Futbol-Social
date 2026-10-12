@@ -341,7 +341,7 @@ export function ClipsReel({ clips }: { clips: ClipReelItem[] }) {
           Tonight&apos;s tape is loading
         </h1>
         <p className="mt-3 max-w-sm text-sm text-[var(--beige-muted)]">
-          Official league highlights with audio. Add SCOREBAT_API_TOKEN in Vercel
+          Official league highlights with audio. Add YOUTUBE_API_KEY in Vercel
           if this stays empty.
         </p>
         <Link href="/matches" className="fs-btn-primary mt-8">

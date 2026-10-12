@@ -46,13 +46,39 @@ function extractEmbedUrl(embed: string): string | null {
   }
 }
 
-/** ScoreBat player: autoplay + sound after a user tap (browsers block unmuted autoplay). */
+export function isYouTubeEmbed(url: string | null | undefined): boolean {
+  return Boolean(
+    url && /(?:^|\.)(youtube\.com|youtube-nocookie\.com)$/i.test(hostOf(url)),
+  );
+}
+
+function hostOf(url: string) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Player params for autoplay + sound after a user tap (browsers block unmuted
+ * autoplay). Handles both ScoreBat and YouTube embeds.
+ */
 export function withEmbedPlayback(
   raw: string,
   opts: { autoplay: boolean; sound: boolean },
 ): string {
   try {
     const url = new URL(raw);
+    if (isYouTubeEmbed(raw)) {
+      url.searchParams.set("autoplay", opts.autoplay ? "1" : "0");
+      url.searchParams.set("mute", opts.sound ? "0" : "1");
+      url.searchParams.set("playsinline", "1");
+      url.searchParams.set("rel", "0");
+      url.searchParams.set("modestbranding", "1");
+      url.searchParams.set("iv_load_policy", "3");
+      return url.toString();
+    }
     url.searchParams.set("autoplay", opts.autoplay ? "true" : "false");
     url.searchParams.set("startMUTED", opts.sound ? "false" : "true");
     url.searchParams.set("muted", opts.sound ? "0" : "1");

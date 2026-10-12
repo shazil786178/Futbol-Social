@@ -134,17 +134,20 @@ export async function listHighlights(matchId?: string): Promise<Highlight[]> {
     embedUrl:
       row.embed_url ??
       (typeof row.video_url === "string" &&
-      row.video_url.includes("scorebat.com/embed")
+      (row.video_url.includes("scorebat.com/embed") ||
+        row.video_url.includes("youtube.com/embed"))
         ? row.video_url
         : null),
     embedHtml: row.embed_html ?? null,
     thumbnailUrl: row.thumbnail_url ?? null,
     source:
       row.source ??
-      (typeof row.video_url === "string" &&
-      row.video_url.includes("scorebat.com")
+      (typeof row.video_url === "string" && row.video_url.includes("scorebat.com")
         ? "scorebat"
-        : null),
+        : typeof row.video_url === "string" &&
+            row.video_url.includes("youtube.com")
+          ? "youtube"
+          : null),
     competitionLabel: row.competition_label ?? null,
   }));
 }
