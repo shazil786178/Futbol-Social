@@ -370,6 +370,14 @@ export async function StartScreen({
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <DailyTile
+            href="/games"
+            kicker="Games · one more match"
+            title="Rogue. Zero. Pets."
+            body="Run the pitch, flick a finish, and raise a monster that changes with how you play."
+            tone="gold"
+            badge="Play"
+          />
+          <DailyTile
             href="/pitch"
             kicker="The Pitch · one ball, Earth"
             title={
@@ -380,7 +388,7 @@ export async function StartScreen({
             body={
               pitch?.myTouchToday
                 ? "Your touch is on the tape. See if we scored overnight."
-                : "Drag. Kick. Tomorrow someone else moves it. One touch a day."
+                : "Curl it. The last fans are still standing on the ball. One touch a day."
             }
             tone="mint"
             badge={pitch?.myTouchToday ? null : "Your touch"}

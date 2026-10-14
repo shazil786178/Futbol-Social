@@ -1,8 +1,4 @@
-import {
-  fetchScoreBatHighlights,
-  flattenScoreBatHighlights,
-  type SyncedHighlight,
-} from "@/lib/football-api/scorebat";
+import type { SyncedHighlight } from "@/lib/football-api/scorebat";
 import {
   fetchYouTubeHighlights,
   flattenYouTubeHighlights,
@@ -24,15 +20,12 @@ function isMissingColumnError(message: string) {
   );
 }
 
-/** Official highlights from YouTube league channels (free) + ScoreBat. */
+/** Official highlights from YouTube league channels. */
 export async function syncScoreBatHighlights(
   supabase: SupabaseClient,
 ): Promise<{ highlightsUpserted: number; stubMatches: number }> {
-  const [youtube, feed] = await Promise.all([
-    fetchYouTubeHighlights().catch(() => []),
-    fetchScoreBatHighlights().catch(() => []),
-  ]);
-  if (youtube.length === 0 && feed.length === 0) {
+  const youtube = await fetchYouTubeHighlights().catch(() => []);
+  if (youtube.length === 0) {
     return { highlightsUpserted: 0, stubMatches: 0 };
   }
 
@@ -47,16 +40,13 @@ export async function syncScoreBatHighlights(
     kickoffAt: m.kickoff_at,
   }));
 
-  const flattened: (SyncedHighlight & { source: "youtube" | "scorebat" })[] = [
-    ...flattenYouTubeHighlights(youtube, localMatches).map((h) => ({
-      ...h,
-      source: "youtube" as const,
-    })),
-    ...flattenScoreBatHighlights(feed, localMatches).map((h) => ({
-      ...h,
-      source: "scorebat" as const,
-    })),
-  ];
+  const flattened: (SyncedHighlight & { source: "youtube" })[] = flattenYouTubeHighlights(
+    youtube,
+    localMatches,
+  ).map((h) => ({
+    ...h,
+    source: "youtube" as const,
+  }));
 
   await supabase.from("competitions").upsert(
     COMPETITIONS.active.map((c) => ({ id: c.id, name: c.name })),
@@ -168,7 +158,7 @@ export async function syncScoreBatHighlights(
   if (probeError && isMissingColumnError(probeError.message)) {
     useLegacy = true;
     console.warn(
-      "Migration 013 not applied — storing ScoreBat embeds in video_url. Run supabase/migrations/013_scorebat_highlights.sql",
+      "Migration 013 not applied — storing YouTube embeds in video_url. Run supabase/migrations/013_scorebat_highlights.sql",
     );
   } else if (probeError) {
     console.error("ScoreBat highlights probe:", probeError.message);

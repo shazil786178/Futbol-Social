@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 /** Secondary modes — the header already covers the main tabs */
 const JUMP = [
+  { href: "/games", label: "Games" },
   { href: "/pitch", label: "Pitch" },
   { href: "/pundit", label: "Pundit" },
   { href: "/train", label: "Train" },

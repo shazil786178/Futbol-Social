@@ -34,6 +34,7 @@ export async function takeTouch(
   side: Shirt,
   angle: number,
   power: number,
+  curl = 0,
 ): Promise<KickOutcome> {
   const supabase = await createClient();
   const {
@@ -41,10 +42,10 @@ export async function takeTouch(
   } = await supabase.auth.getUser();
   const empty = await loadPitchBoard(supabase, user?.id ?? null);
   if (!user) {
-    return { board: empty, path: [], result: "roll", error: "Sign in to take the touch." };
+    return { board: empty, path: [], keepers: [], result: "roll", error: "Sign in to take the touch." };
   }
   if (!Number.isFinite(angle) || !Number.isFinite(power)) {
-    return { board: empty, path: [], result: "roll", error: "Bad swipe." };
+    return { board: empty, path: [], keepers: [], result: "roll", error: "Bad swipe." };
   }
 
   const out = await applyTouch(
@@ -53,6 +54,7 @@ export async function takeTouch(
     side,
     angle,
     Math.min(1, Math.max(0.08, power)),
+    Math.max(-1, Math.min(1, curl)),
   );
   if (!out.error) {
     void recordDailyActivity(supabase, user.id, "game");

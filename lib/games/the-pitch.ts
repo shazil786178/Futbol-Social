@@ -9,7 +9,7 @@ export const FRICTION = 0.982;
 export const DT = 0.05;
 
 export type Shirt = "mint" | "gold";
-export type TouchResult = "roll" | "goal-mint" | "goal-gold";
+export type TouchResult = "roll" | "save" | "goal-mint" | "goal-gold";
 
 export type PitchPoint = { x: number; y: number };
 
@@ -70,53 +70,134 @@ function inGoalMouth(y: number) {
   return y >= mid - GOAL_HALF && y <= mid + GOAL_HALF;
 }
 
-/** Same physics the client preview uses — keep them identical. */
+export type KeeperFrame = { gold: number; mint: number };
+
+export type KickSim = {
+  path: PitchPoint[];
+  keepers: KeeperFrame[];
+  end: PitchPoint;
+  result: TouchResult;
+};
+
+const KEEPER_V = 3.4;
+const REACH = 1.15;
+const BOX = 9;
+
+function bodiesNear(from: PitchPoint, bodies: PitchPoint[]) {
+  return bodies.filter((b) => Math.hypot(b.x - from.x, b.y - from.y) > 2.2);
+}
+
+/**
+ * Shared physics for the preview and the real touch.
+ * Curl hooks the ball. Bodies are the last people who touched it — you can
+ * smack it off them. Keepers dive once you're in their box.
+ */
 export function simulateKick(
   from: PitchPoint,
   angle: number,
   power: number,
-): { path: PitchPoint[]; end: PitchPoint; result: TouchResult } {
+  opts?: { curl?: number; bodies?: PitchPoint[] },
+): KickSim {
+  const curl = Math.max(-1, Math.min(1, opts?.curl ?? 0));
+  const bodies = bodiesNear(from, opts?.bodies ?? []);
   const pwr = Math.min(1, Math.max(0.08, power));
   let vx = Math.cos(angle) * pwr * MAX_SPEED;
   let vy = Math.sin(angle) * pwr * MAX_SPEED;
   let x = from.x;
   let y = from.y;
+  let gY = PITCH_H / 2;
+  let mY = PITCH_H / 2;
+  let tagged: TouchResult = "roll";
   const path: PitchPoint[] = [{ x, y }];
+  const keepers: KeeperFrame[] = [{ gold: gY, mint: mY }];
 
-  for (let i = 0; i < 480; i++) {
+  for (let i = 0; i < 520; i++) {
+    const speed = Math.hypot(vx, vy) || 0.001;
+    vx += (-vy / speed) * curl * 22 * DT;
+    vy += (vx / speed) * curl * 22 * DT;
+
     x += vx * DT;
     y += vy * DT;
     vx *= FRICTION;
     vy *= FRICTION;
 
-    if (y < 0) {
-      y = 0;
-      vy *= -0.52;
-    } else if (y > PITCH_H) {
-      y = PITCH_H;
-      vy *= -0.52;
+    if (y < 0.4) {
+      y = 0.4;
+      vy *= -0.55;
+    } else if (y > PITCH_H - 0.4) {
+      y = PITCH_H - 0.4;
+      vy *= -0.55;
     }
 
-    if (x <= 0) {
-      if (inGoalMouth(y) && vx < 0) {
-        path.push({ x: 0, y });
-        return { path, end: { x: 0, y }, result: "goal-gold" };
+    for (const b of bodies) {
+      const dx = x - b.x;
+      const dy = y - b.y;
+      const d = Math.hypot(dx, dy);
+      if (d >= 1.35 || d < 0.01) continue;
+      const nx = dx / d;
+      const ny = dy / d;
+      const dot = vx * nx + vy * ny;
+      if (dot < 0) {
+        vx = (vx - 2 * dot * nx) * 0.72;
+        vy = (vy - 2 * dot * ny) * 0.72;
+        x = b.x + nx * 1.5;
+        y = b.y + ny * 1.5;
+        tagged = "roll";
       }
-      x = 0;
-      vx *= -0.42;
+    }
+
+    const step = KEEPER_V * DT;
+    if (x < BOX && vx < -0.8) gY += Math.max(-step, Math.min(step, y - gY));
+    else gY += Math.max(-step * 0.4, Math.min(step * 0.4, PITCH_H / 2 - gY));
+    if (x > PITCH_W - BOX && vx > 0.8) mY += Math.max(-step, Math.min(step, y - mY));
+    else mY += Math.max(-step * 0.4, Math.min(step * 0.4, PITCH_H / 2 - mY));
+
+    const goldReach = x < 2.2 && vx < 0 && Math.abs(y - gY) < REACH && inGoalMouth(y);
+    const mintReach = x > PITCH_W - 2.2 && vx > 0 && Math.abs(y - mY) < REACH && inGoalMouth(y);
+
+    if (x <= 0.6 && vx < 0 && inGoalMouth(y) && !goldReach) {
+      path.push({ x: 0, y });
+      keepers.push({ gold: gY, mint: mY });
+      return { path, keepers, end: { x: 0, y }, result: "goal-gold" };
+    }
+    if (x >= PITCH_W - 0.6 && vx > 0 && inGoalMouth(y) && !mintReach) {
+      path.push({ x: PITCH_W, y });
+      keepers.push({ gold: gY, mint: mY });
+      return { path, keepers, end: { x: PITCH_W, y }, result: "goal-mint" };
+    }
+
+    if (goldReach) {
+      vx = Math.abs(vx) * 0.42 + 2;
+      vy *= 0.35;
+      x = 6;
+      tagged = "save";
+    } else if (mintReach) {
+      vx = -Math.abs(vx) * 0.42 - 2;
+      vy *= 0.35;
+      x = PITCH_W - 6;
+      tagged = "save";
+    } else if (x <= 0) {
+      x = 0.4;
+      vx = Math.abs(vx) * 0.4;
     } else if (x >= PITCH_W) {
-      if (inGoalMouth(y) && vx > 0) {
-        path.push({ x: PITCH_W, y });
-        return { path, end: { x: PITCH_W, y }, result: "goal-mint" };
-      }
-      x = PITCH_W;
-      vx *= -0.42;
+      x = PITCH_W - 0.4;
+      vx = -Math.abs(vx) * 0.4;
     }
 
     path.push({ x, y });
-    if (Math.hypot(vx, vy) < 0.38) break;
+    keepers.push({ gold: gY, mint: mY });
+    if (Math.hypot(vx, vy) < 0.45) break;
   }
-  return { path, end: { x, y }, result: "roll" };
+
+  const end = path[path.length - 1] ?? from;
+  return { path, keepers, end, result: tagged };
+}
+
+export function standingBodies(recent: { to: PitchPoint }[], ball: PitchPoint) {
+  return recent
+    .slice(0, 8)
+    .map((t) => t.to)
+    .filter((p) => Math.hypot(p.x - ball.x, p.y - ball.y) > 2.2);
 }
 
 function applyResult(state: PitchState, end: PitchPoint, result: TouchResult, userId: string): PitchState {
@@ -264,6 +345,7 @@ export async function loadPitchBoard(
 export type KickOutcome = {
   board: PitchBoard;
   path: PitchPoint[];
+  keepers: KeeperFrame[];
   result: TouchResult;
   error?: string;
 };
@@ -274,16 +356,21 @@ export async function applyTouch(
   side: Shirt,
   angle: number,
   power: number,
+  curl = 0,
 ): Promise<KickOutcome> {
   const board = await loadPitchBoard(supabase, userId);
+  const miss = { keepers: [] as KeeperFrame[] };
   if (!board.persisted) {
     const key = `${userId}:${board.dayKey}`;
     const used = memory.days.get(key) ?? 0;
-    if (used >= 1) {
-      return { board, path: [], result: "roll", error: "You already took today's touch (local street — run 018 to join Earth)." };
+    if (used >= board.touchLimit) {
+      return { board, path: [], ...miss, result: "roll", error: "You already took today's touch (local street — run 018 to join Earth)." };
     }
     const from = memory.state.ball;
-    const sim = simulateKick(from, angle, power);
+    const sim = simulateKick(from, angle, power, {
+      curl,
+      bodies: standingBodies(board.recent, from),
+    });
     memory.state = applyResult(memory.state, sim.end, sim.result, userId);
     memory.shirts.set(userId, side);
     memory.days.set(key, used + 1);
@@ -292,8 +379,8 @@ export async function applyTouch(
         ...board,
         state: memory.state,
         mySide: side,
-        myTouchToday: true,
-        touchesToday: 1,
+        myTouchToday: used + 1 >= board.touchLimit,
+        touchesToday: used + 1,
         recent: [
           {
             id: `mem-${Date.now()}`,
@@ -310,6 +397,7 @@ export async function applyTouch(
         ],
       },
       path: sim.path,
+      keepers: sim.keepers,
       result: sim.result,
     };
   }
@@ -317,6 +405,7 @@ export async function applyTouch(
     return {
       board,
       path: [],
+      keepers: [],
       result: "roll",
       error:
         board.touchLimit > 1
@@ -326,7 +415,10 @@ export async function applyTouch(
   }
 
   const from = board.state.ball;
-  const { path, end, result } = simulateKick(from, angle, power);
+  const { path, keepers, end, result } = simulateKick(from, angle, power, {
+    curl,
+    bodies: standingBodies(board.recent, from),
+  });
   const next = applyResult(board.state, end, result, userId);
 
   const { data: updated, error: upErr } = await supabase
@@ -349,11 +441,11 @@ export async function applyTouch(
     .maybeSingle();
 
   if (upErr) {
-    return { board, path, result, error: upErr.message };
+    return { board, path, keepers, result, error: upErr.message };
   }
   if (!updated) {
     const fresh = await loadPitchBoard(supabase, userId);
-    return { board: fresh, path: [], result: "roll", error: "Someone else just kicked. The ball moved — swipe again." };
+    return { board: fresh, path: [], keepers: [], result: "roll", error: "Someone else just kicked. The ball moved — swipe again." };
   }
 
   await supabase.from("pitch_touches").insert({
@@ -371,5 +463,5 @@ export async function applyTouch(
   });
 
   const fresh = await loadPitchBoard(supabase, userId);
-  return { board: fresh, path, result };
+  return { board: fresh, path, keepers, result };
 }

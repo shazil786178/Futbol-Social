@@ -35,9 +35,9 @@ const MISSIONS: {
 }[] = [
   {
     id: "game",
-    label: "Take today's touch",
-    hint: "The Pitch · one ball, the whole planet",
-    href: "/pitch",
+    label: "Play one match",
+    hint: "Games · Rogue, Zero, or Pets",
+    href: "/games",
   },
   {
     id: "call",

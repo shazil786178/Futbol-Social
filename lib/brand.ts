@@ -40,13 +40,14 @@ export const NAV_LINKS = [
 export const PRIMARY_NAV = [
   { href: "/", label: "Home" },
   { href: "/clips", label: "Clips" },
-  { href: "/pitch", label: "The Pitch" },
+  { href: "/games", label: "Games" },
   { href: "/matches", label: "Matches" },
   { href: "/train", label: "Train" },
 ] as const;
 
 /** Everything else — keep out of the main path */
 export const MORE_NAV = [
+  { href: "/pitch", label: "The Pitch" },
   { href: "/pundit", label: "AI Pundit" },
   { href: "/call", label: "The Call" },
   { href: "/topbins", label: "Top Bins" },

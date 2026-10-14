@@ -7,11 +7,7 @@ import {
   type ViewerContext,
   EMPTY_VIEWER,
 } from "@/lib/clips/social";
-import {
-  fetchScoreBatHighlights,
-  flattenScoreBatHighlights,
-  type SyncedHighlight,
-} from "@/lib/football-api/scorebat";
+import type { SyncedHighlight } from "@/lib/football-api/scorebat";
 import {
   fetchYouTubeHighlights,
   flattenYouTubeHighlights,
@@ -55,13 +51,9 @@ async function liveYouTube(local: LocalMatch[]): Promise<Highlight[]> {
   );
 }
 
-/** ScoreBat: full feed with a paid token, otherwise their public sample. */
-async function liveScoreBat(local: LocalMatch[]): Promise<Highlight[]> {
-  const feed = await fetchScoreBatHighlights();
-  if (!feed.length) return [];
-  return flattenScoreBatHighlights(feed, local).map((h) =>
-    toHighlight(h, "scorebat"),
-  );
+function isScoreBat(h: Highlight) {
+  const url = `${h.embedUrl ?? ""} ${h.videoUrl ?? ""}`;
+  return h.source === "scorebat" || url.includes("scorebat.com");
 }
 
 function keyOf(h: Highlight) {
@@ -85,19 +77,18 @@ export async function loadAllClips() {
     kickoffAt: m.kickoffAt,
   }));
 
-  const [youtube, scorebat, stored] = await Promise.all([
+  const [youtube, stored] = await Promise.all([
     liveYouTube(local).catch(() => [] as Highlight[]),
-    liveScoreBat(local).catch(() => [] as Highlight[]),
     listHighlights().catch(() => [] as Highlight[]),
   ]);
 
-  // Live rows are freshest; stored rows add fan uploads and anything that has
-  // dropped out of the live feeds. Same video → one entry.
+  // Live YouTube rows are freshest. Stored rows add fan uploads of their own
+  // footage. Old ScoreBat rows are skipped. Same video → one entry.
   const byKey = new Map<string, Highlight>();
   for (const h of stored) {
+    if (isScoreBat(h)) continue;
     if (h.embedUrl || h.videoUrl) byKey.set(keyOf(h), h);
   }
-  for (const h of scorebat) byKey.set(keyOf(h), h);
   for (const h of youtube) byKey.set(keyOf(h), h);
 
   return { matches, clips: [...byKey.values()] };

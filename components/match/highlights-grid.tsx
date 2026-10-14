@@ -60,7 +60,7 @@ export function HighlightsGrid({
               {clip.title}
             </h3>
             <p className="mt-2 text-xs text-[var(--beige-dim)]">
-              {clip.source === "scorebat" ? "Official · " : ""}
+              {clip.source === "youtube" ? "YouTube · " : ""}
               {clip.duration}
             </p>
           </div>

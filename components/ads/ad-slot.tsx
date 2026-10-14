@@ -5,7 +5,6 @@ import {
   adsEnabled,
   adsenseClient,
   adsenseSlot,
-  SPONSOR_MAIL,
   type AdPlacement,
 } from "@/lib/ads/config";
 
@@ -17,8 +16,8 @@ type Props = {
 };
 
 /**
- * Monetization unit: real AdSense when configured, otherwise a terrace-styled
- * sponsor placeholder so layout + direct deals work before approval.
+ * Real AdSense unit. Hidden until a client id and slot are set, so launch
+ * pages do not show an empty sponsor box.
  */
 export function AdSlot({
   placement = "inline",
@@ -39,9 +38,8 @@ export function AdSlot({
     }
   }, [client, slot]);
 
-  if (!adsEnabled()) return null;
-
   const live = Boolean(client && slot);
+  if (!adsEnabled() || !live) return null;
 
   return (
     <aside
@@ -49,26 +47,14 @@ export function AdSlot({
       aria-label="Sponsored"
     >
       <p className="fs-ad__label">Sponsored</p>
-      {live ? (
-        <ins
-          className="adsbygoogle"
-          style={{ display: "block" }}
-          data-ad-client={client!}
-          data-ad-slot={slot!}
-          data-ad-format="auto"
-          data-full-width-responsive="true"
-        />
-      ) : (
-        <a
-          href={`mailto:${SPONSOR_MAIL}?subject=${encodeURIComponent("Futbol Social sponsorship")}`}
-          className="fs-ad__placeholder"
-        >
-          <span className="fs-ad__placeholder-title">Your brand in the stand</span>
-          <span className="fs-ad__placeholder-meta">
-            Reach fans during live matches · {SPONSOR_MAIL}
-          </span>
-        </a>
-      )}
+      <ins
+        className="adsbygoogle"
+        style={{ display: "block" }}
+        data-ad-client={client!}
+        data-ad-slot={slot!}
+        data-ad-format="auto"
+        data-full-width-responsive="true"
+      />
     </aside>
   );
 }

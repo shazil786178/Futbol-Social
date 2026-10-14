@@ -25,12 +25,7 @@ function isPlayerEmbed(url: string | null | undefined) {
 }
 
 function isOfficial(h: Highlight, embed: string | null) {
-  return (
-    h.source === "youtube" ||
-    h.source === "scorebat" ||
-    isYouTubeEmbed(embed) ||
-    isScoreBatEmbed(embed)
-  );
+  return h.source === "youtube" || isYouTubeEmbed(embed);
 }
 
 function hash(s: string) {
@@ -153,7 +148,12 @@ export function buildClipReel(
   const byId = new Map(matches.map((m) => [m.id, m]));
   const now = Date.now();
 
-  let playable = highlights.filter((h) => Boolean(h.embedUrl || h.videoUrl));
+  let playable = highlights.filter((h) => {
+    if (h.source === "scorebat" || isScoreBatEmbed(h.embedUrl) || isScoreBatEmbed(h.videoUrl)) {
+      return false;
+    }
+    return Boolean(h.embedUrl || h.videoUrl);
+  });
 
   if (tab === "following") {
     const teams = [ctx.supportedTeam ?? "", ...ctx.followedTeams].filter(Boolean);
